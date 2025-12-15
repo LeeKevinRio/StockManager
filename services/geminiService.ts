@@ -4,6 +4,7 @@ import { AIAnalysisResult, OHLCData, TechnicalIndicators, TradeSignal, MarketCon
 const initGemini = () => {
   const apiKey = process.env.API_KEY;
   if (!apiKey) {
+    console.error("CRITICAL ERROR: API_KEY is missing in process.env. Please check your Vercel Environment Variables.");
     throw new Error("API Key not found in environment variables");
   }
   return new GoogleGenAI({ apiKey });
@@ -48,6 +49,10 @@ export const lookupStockSymbol = async (query: string): Promise<StockSymbol | nu
     return JSON.parse(text) as StockSymbol;
   } catch (error) {
     console.error("Symbol Lookup Error:", error);
+    // Explicitly log if it's likely an API Key issue
+    if (error instanceof Error && (error.message.includes("API Key") || error.message.includes("403") || error.message.includes("400"))) {
+       console.error("HINT: This usually means your Vercel Environment Variable 'API_KEY' is missing or invalid.");
+    }
     return null;
   }
 };
@@ -114,7 +119,7 @@ export const analyzeStock = async (
     console.error("Gemini Analysis Error:", error);
     return {
       signal: TradeSignal.HOLD,
-      reasoning: "API 分析失敗，暫時建議持有觀察。",
+      reasoning: "API 分析失敗，請檢查 API Key 或網路連線。",
       confidence: 0
     };
   }
@@ -161,7 +166,7 @@ export const fetchMarketContext = async (symbol: string): Promise<MarketContext>
   } catch (error) {
     console.error("Gemini Search Error:", error);
     return {
-      newsSummary: "無法取得即時資訊",
+      newsSummary: "無法取得即時資訊 (請檢查 API Key)",
       sourceUrls: []
     };
   }

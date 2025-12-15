@@ -86,7 +86,8 @@ const App: React.FC = () => {
       });
       handleSelectSymbol(result.symbol);
     } else {
-      alert(`找不到 "${query}" 對應的股票代號，請重試。`);
+      // Improved error messaging
+      alert(`搜尋 "${query}" 失敗。\n\n可能原因：\n1. 找不到對應股票。\n2. (常見) Vercel 環境變數 API_KEY 未設定。\n\n請按 F12 開啟 Console 查看詳細錯誤。`);
     }
   };
 
