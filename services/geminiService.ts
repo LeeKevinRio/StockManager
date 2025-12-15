@@ -1,13 +1,42 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { AIAnalysisResult, OHLCData, TechnicalIndicators, TradeSignal, MarketContext, StockSymbol, NewsItem, CompanyProfile, InvestmentStrategy } from "../types";
 
+// Helper to safely get env var without crashing if process is undefined
+const getApiKey = () => {
+  try {
+    // @ts-ignore
+    if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
+      // @ts-ignore
+      return process.env.API_KEY.trim();
+    }
+    // Fallback for some build tools that inject it differently or if process is missing
+    // @ts-ignore
+    if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_KEY) {
+      // @ts-ignore
+      return import.meta.env.VITE_API_KEY.trim();
+    }
+  } catch (e) {
+    console.warn("Error accessing environment variables:", e);
+  }
+  return undefined;
+};
+
 const initGemini = () => {
-  const apiKey = process.env.API_KEY;
+  const apiKey = getApiKey();
   if (!apiKey) {
-    console.error("CRITICAL ERROR: API_KEY is missing in process.env. Please check your Vercel Environment Variables.");
+    console.error("CRITICAL ERROR: API_KEY is missing. Please check your Vercel Environment Variables. Ensure it is named 'API_KEY'.");
     throw new Error("API Key not found in environment variables");
   }
   return new GoogleGenAI({ apiKey });
+};
+
+// Helper to clean JSON string (remove markdown code blocks)
+const cleanJsonString = (text: string): string => {
+  if (!text) return "";
+  let clean = text.trim();
+  // Remove ```json and ``` wrapping
+  clean = clean.replace(/^```json\s*/, '').replace(/^```\s*/, '').replace(/\s*```$/, '');
+  return clean;
 };
 
 // Resolve a user query (e.g., "Apple", "2330") to a Stock Symbol
@@ -18,7 +47,7 @@ export const lookupStockSymbol = async (query: string): Promise<StockSymbol | nu
       Identify the major stock market symbol for the query: "${query}". 
       Prefer US listings if available, otherwise major global listings.
       
-      Return a JSON object with:
+      Return a STRICT JSON object (no markdown) with:
       - symbol (e.g., "AAPL" or "TSM")
       - name (Company Name, keep it short)
       - sector (General sector, e.g., "Technology", translate sector to Traditional Chinese)
@@ -31,6 +60,7 @@ export const lookupStockSymbol = async (query: string): Promise<StockSymbol | nu
         contents: prompt,
         config: {
           responseMimeType: 'application/json',
+          // Note: responseSchema helps, but sometimes we need to handle raw text backup
           responseSchema: {
             type: Type.OBJECT,
             properties: {
@@ -44,12 +74,21 @@ export const lookupStockSymbol = async (query: string): Promise<StockSymbol | nu
     });
 
     const text = response.text;
-    if (!text) return null;
+    if (!text) {
+      console.warn("Gemini returned empty text for symbol lookup.");
+      return null;
+    }
 
-    return JSON.parse(text) as StockSymbol;
+    try {
+      const cleanText = cleanJsonString(text);
+      return JSON.parse(cleanText) as StockSymbol;
+    } catch (parseError) {
+      console.error("JSON Parse Error in Lookup:", parseError, "Raw Text:", text);
+      return null;
+    }
+
   } catch (error) {
     console.error("Symbol Lookup Error:", error);
-    // Explicitly log if it's likely an API Key issue
     if (error instanceof Error && (error.message.includes("API Key") || error.message.includes("403") || error.message.includes("400"))) {
        console.error("HINT: This usually means your Vercel Environment Variable 'API_KEY' is missing or invalid.");
     }
@@ -112,7 +151,8 @@ export const analyzeStock = async (
     const text = response.text;
     if (!text) throw new Error("No response from AI");
 
-    const result = JSON.parse(text) as AIAnalysisResult;
+    const cleanText = cleanJsonString(text);
+    const result = JSON.parse(cleanText) as AIAnalysisResult;
     return result;
 
   } catch (error) {
