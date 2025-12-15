@@ -1,0 +1,5 @@
+{
+  "name": "Gemini Stock Insight",
+  "description": "A React-based stock analysis dashboard that visualizes OHLC data using Recharts and uses Gemini AI to generate Buy/Sell signals based on technical indicators (RSI, MACD).",
+  "requestFramePermissions": []
+}
