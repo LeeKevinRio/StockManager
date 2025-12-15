@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { StockSymbol } from '../types';
-import { TrendingUp, Activity, BarChart2, Search, Loader2, Trash2, PlusCircle, Bell, BellRing, Check, X } from 'lucide-react';
+import { validateConnection } from '../services/geminiService';
+import { TrendingUp, Activity, BarChart2, Search, Loader2, Trash2, PlusCircle, Bell, BellRing, Check, X, ShieldCheck, ShieldAlert } from 'lucide-react';
 
 interface StockListProps {
   stocks: StockSymbol[];
@@ -16,6 +17,10 @@ const StockList: React.FC<StockListProps> = ({ stocks, selectedSymbol, onSelect,
   const [query, setQuery] = useState('');
   const [editingAlertId, setEditingAlertId] = useState<string | null>(null);
   const [tempAlertPrice, setTempAlertPrice] = useState('');
+  
+  // Connection Test State
+  const [testStatus, setTestStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [testMessage, setTestMessage] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,6 +50,30 @@ const StockList: React.FC<StockListProps> = ({ stocks, selectedSymbol, onSelect,
   const cancelEdit = (e: React.MouseEvent) => {
     e.stopPropagation();
     setEditingAlertId(null);
+  };
+
+  const handleTestConnection = async () => {
+    setTestStatus('loading');
+    setTestMessage('連線測試中...');
+    
+    try {
+      const result = await validateConnection();
+      if (result.success) {
+        setTestStatus('success');
+        setTestMessage(result.message);
+      } else {
+        setTestStatus('error');
+        setTestMessage(result.message);
+      }
+    } catch (e) {
+      setTestStatus('error');
+      setTestMessage('發生未預期的錯誤');
+    }
+    
+    // Reset after 5 seconds if success
+    if (testStatus === 'success') {
+        setTimeout(() => setTestStatus('idle'), 5000);
+    }
   };
 
   return (
@@ -149,9 +178,33 @@ const StockList: React.FC<StockListProps> = ({ stocks, selectedSymbol, onSelect,
           </div>
         ))}
       </div>
-      <div className="p-4 border-t border-gray-800 text-xs text-gray-600 flex items-center justify-center gap-1">
-        <BarChart2 className="w-3 h-3" />
-        <span>由 Gemini 2.5 驅動</span>
+      
+      {/* Footer / API Status Check */}
+      <div className="p-4 border-t border-gray-800 text-xs">
+        <button 
+          onClick={handleTestConnection}
+          disabled={testStatus === 'loading'}
+          className={`w-full flex items-center justify-center gap-2 p-2 rounded transition-colors ${
+            testStatus === 'error' ? 'bg-red-900/30 text-red-400 border border-red-800' :
+            testStatus === 'success' ? 'bg-green-900/30 text-green-400 border border-green-800' :
+            'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'
+          }`}
+        >
+          {testStatus === 'loading' ? <Loader2 className="w-3 h-3 animate-spin" /> : 
+           testStatus === 'success' ? <ShieldCheck className="w-3 h-3" /> :
+           testStatus === 'error' ? <ShieldAlert className="w-3 h-3" /> :
+           <BarChart2 className="w-3 h-3" />}
+           
+          <span>
+            {testStatus === 'loading' ? '連線測試中...' : 
+             testStatus === 'success' ? 'API 連線正常' :
+             testStatus === 'error' ? '連線失敗' :
+             '測試 API 連線'}
+          </span>
+        </button>
+        {testMessage && testStatus === 'error' && (
+          <p className="mt-2 text-red-400 text-center leading-tight">{testMessage}</p>
+        )}
       </div>
     </div>
   );

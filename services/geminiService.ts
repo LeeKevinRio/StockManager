@@ -1,17 +1,9 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { AIAnalysisResult, OHLCData, TechnicalIndicators, TradeSignal, MarketContext, StockSymbol, NewsItem, CompanyProfile, InvestmentStrategy } from "../types";
 
-// Helper to safely get env var from multiple possible sources (Vite, Process, or Window Shim)
+// Helper to safely get env var
 const getApiKey = () => {
-  // 1. Try global window shim (from import.js)
-  // @ts-ignore
-  if (typeof window !== 'undefined' && window.process && window.process.env && window.process.env.API_KEY) {
-     // @ts-ignore
-     const key = window.process.env.API_KEY;
-     if (key && key !== "AIzaSyDuexMhYM6_B9zFeqEPI4BXEofIDmNG8VY") return key;
-  }
-
-  // 2. Try Vite standard (import.meta.env)
+  // 1. Try Vite standard (import.meta.env) - Best for Vercel + Vite
   try {
     // @ts-ignore
     if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_KEY) {
@@ -22,12 +14,14 @@ const getApiKey = () => {
     // ignore
   }
 
-  // 3. Try Node.js standard
+  // 2. Try Node.js standard (process.env) - Fallback for other environments
   try {
     // @ts-ignore
-    if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
+    if (typeof process !== 'undefined' && process.env) {
       // @ts-ignore
-      return process.env.API_KEY;
+      if (process.env.VITE_API_KEY) return process.env.VITE_API_KEY;
+      // @ts-ignore
+      if (process.env.API_KEY) return process.env.API_KEY;
     }
   } catch (e) {
      // ignore
@@ -38,12 +32,51 @@ const getApiKey = () => {
 
 const initGemini = () => {
   const apiKey = getApiKey();
-  if (!apiKey || apiKey === "AIzaSyDuexMhYM6_B9zFeqEPI4BXEofIDmNG8VY") {
-    console.error("CRITICAL ERROR: API_KEY is missing or default.");
-    console.error("Please open 'import.js' and paste your Google Gemini API Key.");
-    throw new Error("API Key not configured. Check import.js");
+  if (!apiKey) {
+    // Throw specific error for UI handling
+    throw new Error("MISSING_KEY");
   }
   return new GoogleGenAI({ apiKey });
+};
+
+// Test Connection Function
+export const validateConnection = async (): Promise<{ success: boolean; message: string }> => {
+  try {
+    const ai = initGemini();
+    // Use a very cheap/fast call just to test auth
+    const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: "Test connection",
+    });
+    const text = response.text;
+    if (text) {
+      return { success: true, message: "連線成功！Vercel 環境變數設定正確。" };
+    } else {
+      return { success: false, message: "連線建立，但 AI 未回傳資料。" };
+    }
+  } catch (error: any) {
+    console.error("Connection Test Failed:", error);
+    
+    let msg = error.message || "未知錯誤";
+    
+    if (msg === "MISSING_KEY") {
+        return { success: false, message: "找不到 Key。請檢查 Vercel 環境變數 (建議使用 VITE_API_KEY)。" };
+    }
+    if (msg.includes("400") || msg.includes("INVALID_ARGUMENT")) {
+        return { success: false, message: "Key 格式錯誤 (400)。請確認複製時沒有多餘空格。" };
+    }
+    if (msg.includes("403") || msg.includes("PERMISSION_DENIED")) {
+        return { success: false, message: "權限拒絕 (403)。Key 可能無效或未開通 Gemini API。" };
+    }
+    if (msg.includes("429") || msg.includes("RESOURCE_EXHAUSTED")) {
+        return { success: false, message: "額度已滿 (429)。請稍後再試。" };
+    }
+    if (msg.includes("fetch") || msg.includes("network")) {
+        return { success: false, message: "網路連線錯誤。請檢查您的網路狀態。" };
+    }
+
+    return { success: false, message: `連線失敗: ${msg}` };
+  }
 };
 
 // Helper to clean JSON string (remove markdown code blocks)
@@ -171,7 +204,7 @@ export const analyzeStock = async (
     console.error("Gemini Analysis Error:", error);
     return {
       signal: TradeSignal.HOLD,
-      reasoning: "API 分析失敗，請檢查 import.js 設定。",
+      reasoning: "API 分析失敗，請檢查 Vercel 環境變數。",
       confidence: 0
     };
   }
