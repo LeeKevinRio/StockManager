@@ -11,6 +11,7 @@ export interface StockSymbol {
   symbol: string;
   name: string;
   sector: string;
+  market: 'US' | 'TW'; // 新增市場區分
   alertPrice?: number; // 使用者設定的價位通知
 }
 

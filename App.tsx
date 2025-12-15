@@ -13,11 +13,21 @@ import { Loader2, LayoutDashboard, Newspaper, Info, TrendingUp, Search, BellRing
 type TabType = 'chart' | 'news' | 'info' | 'strategy';
 
 const App: React.FC = () => {
-  // 1. Initialize from localStorage
+  // 1. Initialize from localStorage with migration
   const [stocks, setStocks] = useState<StockSymbol[]>(() => {
     try {
       const saved = localStorage.getItem('myWatchlist');
-      return saved ? JSON.parse(saved) : [];
+      if (!saved) return [];
+      
+      const parsed: StockSymbol[] = JSON.parse(saved);
+      // Migration: Add 'market' if missing
+      return parsed.map(s => {
+        if (!s.market) {
+            // Simple heuristic: numbers = TW, letters = US
+            return { ...s, market: /^\d+$/.test(s.symbol) ? 'TW' : 'US' };
+        }
+        return s;
+      });
     } catch (e) {
       return [];
     }
@@ -68,15 +78,19 @@ const App: React.FC = () => {
     setStocks(prev => prev.map(s => s.symbol === symbol ? { ...s, alertPrice: price } : s));
   };
 
-  const handleSearch = async (query: string) => {
-    const existing = stocks.find(s => s.symbol.toLowerCase() === query.toLowerCase() || s.name.toLowerCase().includes(query.toLowerCase()));
+  const handleSearch = async (query: string, market: 'US' | 'TW') => {
+    // Check local duplicate first
+    const existing = stocks.find(s => 
+        (s.symbol.toLowerCase() === query.toLowerCase() || s.name.toLowerCase().includes(query.toLowerCase())) 
+        && s.market === market
+    );
     if (existing) {
       handleSelectSymbol(existing.symbol);
       return;
     }
 
     setIsSearching(true);
-    const result = await lookupStockSymbol(query);
+    const result = await lookupStockSymbol(query, market);
     setIsSearching(false);
 
     if (result) {
@@ -87,7 +101,7 @@ const App: React.FC = () => {
       handleSelectSymbol(result.symbol);
     } else {
       // Improved error messaging
-      alert(`搜尋 "${query}" 失敗。\n\n可能原因：\n1. 找不到對應股票。\n2. (常見) Vercel 環境變數 API_KEY 未設定。\n\n請按 F12 開啟 Console 查看詳細錯誤。`);
+      alert(`搜尋 "${query}" (${market === 'US' ? '美股' : '台股'}) 失敗。\n\n可能原因：\n1. 找不到對應股票。\n2. (常見) Vercel 環境變數 API_KEY 未設定。\n\n請按 F12 開啟 Console 查看詳細錯誤。`);
     }
   };
 
@@ -195,7 +209,7 @@ const App: React.FC = () => {
               </div>
               <h2 className="text-2xl font-bold text-white mb-2">開始您的投資分析</h2>
               <p className="max-w-md text-center text-gray-400">
-                您的自選清單目前為空。請在左側搜尋欄輸入股票代碼或公司名稱（例如：AAPL, 台積電, NVDA）來新增追蹤。
+                您的自選清單目前為空。請在左側搜尋欄選擇「美股」或「台股」，輸入代碼或名稱（如 2330 或 NVDA）來新增追蹤。
               </p>
            </div>
         )}

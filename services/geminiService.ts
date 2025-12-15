@@ -89,21 +89,38 @@ const cleanJsonString = (text: string): string => {
 };
 
 // Resolve a user query (e.g., "Apple", "2330") to a Stock Symbol
-export const lookupStockSymbol = async (query: string): Promise<StockSymbol | null> => {
+export const lookupStockSymbol = async (query: string, market: 'US' | 'TW'): Promise<StockSymbol | null> => {
   try {
     const ai = initGemini();
-    const prompt = `
-      Identify the major stock market symbol for the query: "${query}". 
-      Prefer US listings if available, otherwise major global listings.
-      
-      Return a STRICT JSON object (no markdown) with:
-      - symbol (e.g., "AAPL" or "TSM")
-      - name (Company Name, keep it short)
-      - sector (General sector, e.g., "Technology", translate sector to Traditional Chinese)
-      
-      If the query is invalid or not a public company, return null.
-    `;
     
+    let prompt = "";
+    if (market === 'TW') {
+      prompt = `
+        Identify the Taiwan Stock Exchange (TWSE/TPEx) symbol for the query: "${query}".
+        
+        Rules:
+        1. Return the numeric code (e.g., "2330" for TSMC, "2603" for Evergreen).
+        2. DO NOT append .TW or .TWO suffix in the 'symbol' field, just the number.
+        3. If the user searches for a US company (e.g. Apple), try to find a related Taiwan concept stock or return null.
+        4. Name should be in Traditional Chinese.
+        
+        Return a STRICT JSON object:
+        { "symbol": "2330", "name": "台積電", "sector": "半導體業", "market": "TW" }
+      `;
+    } else {
+      prompt = `
+        Identify the US Stock Market (NYSE/NASDAQ) ticker for the query: "${query}".
+        
+        Rules:
+        1. Return the ticker symbol (e.g., "AAPL", "NVDA").
+        2. Name should be the common English company name.
+        3. Sector should be translated to Traditional Chinese.
+        
+        Return a STRICT JSON object:
+        { "symbol": "AAPL", "name": "Apple Inc.", "sector": "科技業", "market": "US" }
+      `;
+    }
+
     const response = await ai.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: prompt,
@@ -114,9 +131,10 @@ export const lookupStockSymbol = async (query: string): Promise<StockSymbol | nu
             properties: {
               symbol: { type: Type.STRING },
               name: { type: Type.STRING },
-              sector: { type: Type.STRING }
+              sector: { type: Type.STRING },
+              market: { type: Type.STRING, enum: ["US", "TW"] }
             },
-            required: ['symbol', 'name', 'sector']
+            required: ['symbol', 'name', 'sector', 'market']
           }
         }
     });
@@ -129,7 +147,10 @@ export const lookupStockSymbol = async (query: string): Promise<StockSymbol | nu
 
     try {
       const cleanText = cleanJsonString(text);
-      return JSON.parse(cleanText) as StockSymbol;
+      const result = JSON.parse(cleanText) as StockSymbol;
+      // Force the market type just in case AI hallucinates
+      result.market = market; 
+      return result;
     } catch (parseError) {
       console.error("JSON Parse Error in Lookup:", parseError, "Raw Text:", text);
       return null;

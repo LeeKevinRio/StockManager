@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
 import { StockSymbol } from '../types';
 import { validateConnection } from '../services/geminiService';
-import { TrendingUp, Activity, BarChart2, Search, Loader2, Trash2, PlusCircle, Bell, BellRing, Check, X, ShieldCheck, ShieldAlert } from 'lucide-react';
+import { TrendingUp, Activity, BarChart2, Search, Loader2, Trash2, PlusCircle, Bell, BellRing, Check, X, ShieldCheck, ShieldAlert, Globe2 } from 'lucide-react';
 
 interface StockListProps {
   stocks: StockSymbol[];
   selectedSymbol: string;
   onSelect: (symbol: string) => void;
-  onSearch: (query: string) => void;
+  onSearch: (query: string, market: 'US' | 'TW') => void;
   onRemove: (symbol: string) => void;
   onUpdateAlert: (symbol: string, price: number | undefined) => void;
   isSearching: boolean;
@@ -18,6 +18,9 @@ const StockList: React.FC<StockListProps> = ({ stocks, selectedSymbol, onSelect,
   const [editingAlertId, setEditingAlertId] = useState<string | null>(null);
   const [tempAlertPrice, setTempAlertPrice] = useState('');
   
+  // Market Tab State
+  const [activeTab, setActiveTab] = useState<'US' | 'TW'>('US');
+  
   // Connection Test State
   const [testStatus, setTestStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
   const [testMessage, setTestMessage] = useState('');
@@ -25,10 +28,20 @@ const StockList: React.FC<StockListProps> = ({ stocks, selectedSymbol, onSelect,
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (query.trim()) {
-      onSearch(query);
+      onSearch(query, activeTab);
       setQuery('');
     }
   };
+
+  // Filter stocks based on active tab
+  const displayedStocks = stocks.filter(s => {
+      // Compatibility for old data: if market is missing, assume US if not numeric, TW if numeric
+      if (!s.market) {
+          const isNumeric = /^\d+$/.test(s.symbol);
+          return activeTab === (isNumeric ? 'TW' : 'US');
+      }
+      return s.market === activeTab;
+  });
 
   const startEditingAlert = (e: React.MouseEvent, symbol: string, currentPrice?: number) => {
     e.stopPropagation();
@@ -83,12 +96,28 @@ const StockList: React.FC<StockListProps> = ({ stocks, selectedSymbol, onSelect,
           <TrendingUp className="text-blue-500 w-6 h-6" />
           <h1 className="text-lg font-bold text-gray-100">自選股清單</h1>
         </div>
+
+        {/* Market Tabs */}
+        <div className="flex bg-gray-800 p-1 rounded-lg mb-4">
+            <button 
+                onClick={() => setActiveTab('US')}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-sm font-medium rounded transition-all ${activeTab === 'US' ? 'bg-blue-600 text-white shadow' : 'text-gray-400 hover:text-white'}`}
+            >
+                <Globe2 className="w-3.5 h-3.5" /> 美股
+            </button>
+            <button 
+                onClick={() => setActiveTab('TW')}
+                className={`flex-1 flex items-center justify-center gap-1.5 py-1.5 text-sm font-medium rounded transition-all ${activeTab === 'TW' ? 'bg-green-600 text-white shadow' : 'text-gray-400 hover:text-white'}`}
+            >
+                <Activity className="w-3.5 h-3.5" /> 台股
+            </button>
+        </div>
         
         {/* Search Bar */}
         <form onSubmit={handleSubmit} className="relative">
            <input 
              type="text" 
-             placeholder="新增股票 (如: NVDA)..." 
+             placeholder={activeTab === 'US' ? "搜尋美股 (如: NVDA)..." : "搜尋台股 (如: 2330)..."}
              value={query}
              onChange={(e) => setQuery(e.target.value)}
              className="w-full bg-gray-800 text-sm text-white rounded-md pl-9 pr-4 py-2 border border-gray-700 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all placeholder:text-gray-500"
@@ -101,15 +130,15 @@ const StockList: React.FC<StockListProps> = ({ stocks, selectedSymbol, onSelect,
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        {stocks.length === 0 && (
+        {displayedStocks.length === 0 && (
           <div className="flex flex-col items-center justify-center h-40 text-gray-500 p-4 text-center">
             <PlusCircle className="w-8 h-8 mb-2 opacity-50" />
-            <p className="text-sm">您的清單是空的</p>
+            <p className="text-sm">您的{activeTab === 'US' ? '美股' : '台股'}清單是空的</p>
             <p className="text-xs text-gray-600 mt-1">請上方搜尋並加入股票</p>
           </div>
         )}
 
-        {stocks.map((stock) => (
+        {displayedStocks.map((stock) => (
           <div
             key={stock.symbol}
             className={`w-full text-left border-b border-gray-800 transition-colors hover:bg-gray-800 flex items-center justify-between group relative
