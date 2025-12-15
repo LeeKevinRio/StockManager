@@ -1,31 +1,47 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { AIAnalysisResult, OHLCData, TechnicalIndicators, TradeSignal, MarketContext, StockSymbol, NewsItem, CompanyProfile, InvestmentStrategy } from "../types";
 
-// Helper to safely get env var without crashing if process is undefined
+// Helper to safely get env var from multiple possible sources (Vite, Process, or Window Shim)
 const getApiKey = () => {
+  // 1. Try global window shim (from import.js)
+  // @ts-ignore
+  if (typeof window !== 'undefined' && window.process && window.process.env && window.process.env.API_KEY) {
+     // @ts-ignore
+     const key = window.process.env.API_KEY;
+     if (key && key !== "YOUR_API_KEY_HERE") return key;
+  }
+
+  // 2. Try Vite standard (import.meta.env)
+  try {
+    // @ts-ignore
+    if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_KEY) {
+      // @ts-ignore
+      return import.meta.env.VITE_API_KEY;
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  // 3. Try Node.js standard
   try {
     // @ts-ignore
     if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
       // @ts-ignore
-      return process.env.API_KEY.trim();
-    }
-    // Fallback for some build tools that inject it differently or if process is missing
-    // @ts-ignore
-    if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_KEY) {
-      // @ts-ignore
-      return import.meta.env.VITE_API_KEY.trim();
+      return process.env.API_KEY;
     }
   } catch (e) {
-    console.warn("Error accessing environment variables:", e);
+     // ignore
   }
+  
   return undefined;
 };
 
 const initGemini = () => {
   const apiKey = getApiKey();
-  if (!apiKey) {
-    console.error("CRITICAL ERROR: API_KEY is missing. Please check your Vercel Environment Variables. Ensure it is named 'API_KEY'.");
-    throw new Error("API Key not found in environment variables");
+  if (!apiKey || apiKey === "YOUR_API_KEY_HERE") {
+    console.error("CRITICAL ERROR: API_KEY is missing or default.");
+    console.error("Please open 'import.js' and paste your Google Gemini API Key.");
+    throw new Error("API Key not configured. Check import.js");
   }
   return new GoogleGenAI({ apiKey });
 };
@@ -60,7 +76,6 @@ export const lookupStockSymbol = async (query: string): Promise<StockSymbol | nu
         contents: prompt,
         config: {
           responseMimeType: 'application/json',
-          // Note: responseSchema helps, but sometimes we need to handle raw text backup
           responseSchema: {
             type: Type.OBJECT,
             properties: {
@@ -89,9 +104,6 @@ export const lookupStockSymbol = async (query: string): Promise<StockSymbol | nu
 
   } catch (error) {
     console.error("Symbol Lookup Error:", error);
-    if (error instanceof Error && (error.message.includes("API Key") || error.message.includes("403") || error.message.includes("400"))) {
-       console.error("HINT: This usually means your Vercel Environment Variable 'API_KEY' is missing or invalid.");
-    }
     return null;
   }
 };
@@ -159,7 +171,7 @@ export const analyzeStock = async (
     console.error("Gemini Analysis Error:", error);
     return {
       signal: TradeSignal.HOLD,
-      reasoning: "API 分析失敗，請檢查 API Key 或網路連線。",
+      reasoning: "API 分析失敗，請檢查 import.js 設定。",
       confidence: 0
     };
   }
