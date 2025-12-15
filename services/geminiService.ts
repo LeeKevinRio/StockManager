@@ -8,7 +8,7 @@ const getApiKey = () => {
   if (typeof window !== 'undefined' && window.process && window.process.env && window.process.env.API_KEY) {
      // @ts-ignore
      const key = window.process.env.API_KEY;
-     if (key && key !== "YOUR_API_KEY_HERE") return key;
+     if (key && key !== "AIzaSyDuexMhYM6_B9zFeqEPI4BXEofIDmNG8VY") return key;
   }
 
   // 2. Try Vite standard (import.meta.env)
@@ -38,7 +38,7 @@ const getApiKey = () => {
 
 const initGemini = () => {
   const apiKey = getApiKey();
-  if (!apiKey || apiKey === "YOUR_API_KEY_HERE") {
+  if (!apiKey || apiKey === "AIzaSyDuexMhYM6_B9zFeqEPI4BXEofIDmNG8VY") {
     console.error("CRITICAL ERROR: API_KEY is missing or default.");
     console.error("Please open 'import.js' and paste your Google Gemini API Key.");
     throw new Error("API Key not configured. Check import.js");
